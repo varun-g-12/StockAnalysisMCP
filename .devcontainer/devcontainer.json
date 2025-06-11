@@ -1,0 +1,7 @@
+{
+	"name": "Python 3",
+	"image": "python:3.12-slim-bookworm",
+	"features": {
+		"ghcr.io/devcontainers/features/git:1": {}
+	}
+}

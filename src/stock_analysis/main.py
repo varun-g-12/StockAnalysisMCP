@@ -3,6 +3,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Hashable
+from mcp.server.fastmcp import FastMCP
 
 import pandas as pd
 import requests
@@ -17,6 +18,8 @@ logging.basicConfig(
     handlers=[logging.FileHandler("stock_analysis.log"), logging.StreamHandler()],
 )
 logger: logging.Logger = logging.getLogger(__name__)
+
+mcp = FastMCP("stock_analysis")
 
 
 class TradingViewError(Exception):
@@ -169,6 +172,7 @@ def scrape_data() -> None:
         raise TradingViewError(f"Error while scraping data: {e}")
 
 
+@mcp.tool()
 def get_table_overview() -> str:
     """Get database table schema and preview with proper error handling.
 
@@ -226,6 +230,44 @@ def get_table_overview() -> str:
         raise TradingViewError(f"Unable to get table overview: {e}")
 
 
+@mcp.tool()
+def query_database(sql_query: str) -> list[dict[Hashable, Any]]:
+    """Execute SQL query on the stock database and return results.
+
+    This function executes a provided SQL query against the stock_data table
+    in the SQLite database. If the database doesn't exist, it automatically
+    triggers data scraping to create it.
+
+    Args:
+        sql_query: SQL query string to execute against the database
+
+    Returns:
+        list[dict[Hashable, Any]]: Query results as a list of dictionaries
+
+    Raises:
+        TradingViewError: If unable to execute the query or access the database
+    """
+    logger.info(f"Executing database query: {sql_query[:100]}...")
+
+    try:
+        database_path: Path = create_database_path()
+        logger.debug(f"Checking if database exists at: {database_path}")
+
+        if not database_path.exists():
+            logger.warning(
+                f"Database file not found at {database_path}, scraping new data"
+            )
+            scrape_data()
+
+        with sqlite3.connect(database_path) as conn:
+            sql_output: DataFrame = pd.read_sql_query(sql_query, conn)
+            logger.info(f"Query executed successfully, returned {len(sql_output)} rows")
+            return sql_output.to_dict(orient="records")
+
+    except Exception as e:
+        logger.error(f"Failed to execute database query: {e}")
+        raise TradingViewError(f"Database query execution failed: {e}")
+
+
 if __name__ == "__main__":
-    overview: str = get_table_overview()
-    print(overview)
+    mcp.run()

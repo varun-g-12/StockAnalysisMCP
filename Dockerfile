@@ -17,8 +17,7 @@ WORKDIR /app
 COPY pyproject.toml poetry.lock ./
 
 # Install dependencies
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi
+RUN poetry install --only main --no-interaction --no-ansi
 
 # Copy the rest of the code
 COPY src/ ./src/

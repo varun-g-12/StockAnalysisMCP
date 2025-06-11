@@ -1,30 +1,56 @@
-# syntax=docker/dockerfile:1
-FROM python:3.12-slim
+# ---- Builder Stage ----
+# This stage installs Poetry and project dependencies.
+FROM python:3.12-slim-bookworm AS builder
 
-# Install system dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential gcc libsqlite3-dev && \
-    rm -rf /var/lib/apt/lists/*
+# Set environment variables for Python and Poetry
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    POETRY_VERSION=2.1.3 \
+    POETRY_HOME="/opt/poetry" \
+    POETRY_VIRTUALENVS_IN_PROJECT=true
 
-# Install Poetry
-ENV POETRY_VERSION=1.8.2
+# Add Poetry to the PATH
+ENV PATH="$POETRY_HOME/bin:$PATH"
+
+# Install Poetry using pip for better Docker integration
 RUN pip install "poetry==$POETRY_VERSION"
 
-# Set work directory
+# Set the working directory
 WORKDIR /app
 
-# Copy only requirements first for caching
-COPY pyproject.toml poetry.lock ./
+# Copy only the dependency definition files first
+# This allows Docker to cache the dependency installation layer
+COPY pyproject.toml poetry.lock* README.md ./
 
-# Install dependencies
+# Copy the source code and temp dir
+COPY src/ ./src/
+
+# Install project dependencies into a local .venv folder
+# --no-dev: Installs only production dependencies.
+# --no-interaction: Prevents interactive prompts.
+# --no-ansi: Disables ANSI output for cleaner logs.
 RUN poetry install --only main --no-interaction --no-ansi
 
-# Copy the rest of the code
-COPY src/ ./src/
-COPY README.md ./
+# ---- Final Stage ----
+# This stage creates the final, lean production image.
+FROM python:3.12-slim-bookworm AS final
 
-# Expose port (if your MCP server listens on 8000, adjust as needed)
-EXPOSE 8000
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:$PATH"
 
-# Default command to run the MCP server
-CMD ["python", "src/stock_analysis/main.py"]
+# Set the working directory
+WORKDIR /app
+
+# Copy the virtual environment (with dependencies) from the builder stage
+COPY --from=builder /app/.venv ./.venv
+
+# Copy the source code from the builder stage
+COPY --from=builder /app/src ./src/
+
+# Create a volume mount point for output
+# VOLUME ["/app/tempDir"]
+
+# Set the command to run the application
+CMD ["python", "-m", "src.stock_analysis.main"]

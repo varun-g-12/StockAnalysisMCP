@@ -10,7 +10,8 @@ requires-python = ">=3.12"
 dependencies = [
     "pandas (>=2.3.0,<3.0.0)",
     "requests (>=2.32.4,<3.0.0)",
-    "mcp[cli] (>=1.9.3,<2.0.0)"
+    "mcp[cli] (>=1.9.3,<2.0.0)",
+    "fastapi-mcp (>=0.3.4,<0.4.0)"
 ]
 
 [tool.poetry]

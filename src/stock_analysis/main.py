@@ -3,13 +3,20 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Hashable
-from mcp.server.fastmcp import FastMCP
 
 import pandas as pd
 import requests
-from constant_parameters import COLUMNS, DATA, HEADERS, PARAMS, SCANNER_URL
+from mcp.server.fastmcp import FastMCP
 from pandas import DataFrame
 from requests import Response
+
+from stock_analysis.constant_parameters import (
+    COLUMNS,
+    DATA,
+    HEADERS,
+    PARAMS,
+    SCANNER_URL,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -270,4 +277,4 @@ def query_database(sql_query: str) -> list[dict[Hashable, Any]]:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="stdio")

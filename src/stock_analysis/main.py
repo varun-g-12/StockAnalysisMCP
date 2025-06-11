@@ -2,7 +2,7 @@ import logging
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Hashable
 
 import pandas as pd
 import requests
@@ -13,7 +13,7 @@ from requests import Response
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(funcName)s - %(levelname)s - %(message)s",
     handlers=[logging.FileHandler("stock_analysis.log"), logging.StreamHandler()],
 )
 logger: logging.Logger = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ def response_to_df(response: Response) -> DataFrame:
         # Filter out None values and log warnings for missing data
         rows: list[Any] = []
         for i, row in enumerate(data):
-            row_data = row.get("d", None)
+            row_data: Any | None = row.get("d", None)
             if row_data is None:
                 logger.warning(f"Row {i} missing 'd' key, skipping")
                 continue
@@ -169,15 +169,63 @@ def scrape_data() -> None:
         raise TradingViewError(f"Error while scraping data: {e}")
 
 
-def main() -> None:
-    """Entry point for the application."""
-    logger.info("Starting Stock Analysis Application")
+def get_table_overview() -> str:
+    """Get database table schema and preview with proper error handling.
+
+    This function retrieves the schema and a sample row from the stock_data table
+    in the SQLite database. If the database doesn't exist, it automatically
+    triggers data scraping to create it.
+
+    Returns:
+        str: A formatted string containing:
+            - Database table name
+            - Complete schema information with column details
+            - Preview of table values (first row)
+
+    Raises:
+        TradingViewError: If unable to access the database or retrieve table information
+    """
+    logger.info("Getting table overview")
+
     try:
-        scrape_data()
-        logger.info("Stock Analysis Application completed successfully")
-    except TradingViewError as e:
-        logger.error(f"Application failed with TradingView error: {e}")
-        raise
+        database_path: Path = create_database_path()
+        logger.debug(f"Checking if database exists at: {database_path}")
+
+        if not database_path.exists():
+            logger.warning(
+                f"Database file not found at {database_path}, scraping new data"
+            )
+            scrape_data()
+
+        with sqlite3.connect(database_path) as conn:
+            # Get table schema
+            schema_query = "PRAGMA table_info(stock_data);"
+            schema: DataFrame = pd.read_sql_query(schema_query, conn)
+            logger.debug(f"Retrieved schema with {len(schema)} columns")
+
+            # Get table preview
+            preview_query = "SELECT * FROM stock_data LIMIT 1;"
+            preview: DataFrame = pd.read_sql_query(preview_query, conn)
+            logger.debug(f"Retrieved preview with {len(preview)} rows")
+
+        # Format output with proper spacing
+        schema_dict: list[dict[Hashable, Any]] = schema.to_dict(orient="records")
+        preview_dict: list[dict[Hashable, Any]] = preview.to_dict(orient="records")
+
+        overview: str = (
+            "The database table name: `stock_data`.\n"
+            f"The following is the schema of the data table `stock_data`: {schema_dict}\n"
+            f"The following is the preview of the table values: {preview_dict}"
+        )
+
+        logger.info("Successfully generated table overview")
+        return overview
+
     except Exception as e:
-        logger.error(f"Application failed with unexpected error: {e}")
-        raise
+        logger.error(f"Failed to get table overview: {e}")
+        raise TradingViewError(f"Unable to get table overview: {e}")
+
+
+if __name__ == "__main__":
+    overview: str = get_table_overview()
+    print(overview)
